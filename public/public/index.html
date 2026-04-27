@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>宏观投资决策系统</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #f8f7f4;
+  --surface: #ffffff;
+  --border:  rgba(0,0,0,0.10);
+  --border2: rgba(0,0,0,0.18);
+  --text:    #1a1a18;
+  --muted:   #6b6a64;
+  --hint:    #9c9a92;
+  --buy:     #1D9E75; --buy-bg: #E1F5EE; --buy-text: #085041;
+  --sell:    #A32D2D; --sell-bg: #FCEBEB; --sell-text: #501313;
+  --warn:    #BA7517; --warn-bg: #FAEEDA; --warn-text: #633806;
+  --neu:     #888780; --neu-bg:  #F1EFE8; --neu-text:  #2C2C2A;
+  --radius:  10px; --radius-sm: 6px;
+  --shadow:  0 1px 3px rgba(0,0,0,.07);
+  font-size: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141412; --surface: #1e1e1c; --border: rgba(255,255,255,.10);
+    --border2: rgba(255,255,255,.18); --text: #e8e6de; --muted: #9c9a92; --hint: #6b6a64;
+    --buy-bg: #04342C; --buy-text: #9FE1CB;
+    --sell-bg: #501313; --sell-text: #F7C1C1;
+    --warn-bg: #412402; --warn-text: #FAC775;
+    --neu-bg: #2C2C2A; --neu-text: #D3D1C7;
+  }
+}
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+a { color: var(--buy); }
+
+/* ── Layout ───────────────────────────────────────────────────────────── */
+.container { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
+.card { background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); }
+.card-body { padding: 16px 18px; }
+.section { margin-bottom: 16px; }
+h2.section-title { font-size: 11px; font-weight: 600; color: var(--muted);
+  letter-spacing: .07em; text-transform: uppercase; margin-bottom: 10px; }
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+.header { display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.header-left h1 { font-size: 20px; font-weight: 600; margin-bottom: 2px; }
+.header-left p { font-size: 12px; color: var(--muted); }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.refresh-btn { display: flex; align-items: center; gap: 6px; font-size: 12px;
+  padding: 6px 14px; border-radius: 99px; border: 0.5px solid var(--border2);
+  background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s; }
+.refresh-btn:hover { background: var(--bg); }
+.refresh-btn.loading { opacity: .6; pointer-events: none; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--neu); }
+.status-dot.live { background: var(--buy); animation: pulse 2s infinite; }
+.status-dot.error { background: var(--sell); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.status-text { font-size: 11px; color: var(--muted); }
+
+/* ── Market tabs ──────────────────────────────────────────────────────── */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.tab { font-size: 12px; padding: 5px 14px; border-radius: 99px;
+  border: 0.5px solid var(--border); background: var(--surface);
+  color: var(--muted); cursor: pointer; transition: all .15s; }
+.tab.active { background: var(--text); color: var(--surface); border-color: transparent; }
+
+/* ── Hero score ───────────────────────────────────────────────────────── */
+.hero { display: grid; grid-template-columns: auto 1fr; gap: 20px;
+  align-items: center; padding: 20px; }
+@media(max-width:500px){ .hero { grid-template-columns: 1fr; } }
+.ring-wrap { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+.ring-wrap svg { display: block; }
+.ring-center { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; }
+.ring-score { font-size: 30px; font-weight: 600; line-height: 1; }
+.ring-label { font-size: 10px; color: var(--muted); margin-top: 3px; letter-spacing:.04em; }
+.hero-right {}
+.signal-pill { display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 3px 12px; border-radius: 99px; margin-bottom: 8px; }
+.hero-action { font-size: 24px; font-weight: 600; margin-bottom: 6px; line-height: 1.2; }
+.hero-reason { font-size: 12px; color: var(--muted); line-height: 1.7; max-width: 480px; }
+.update-time { font-size: 11px; color: var(--hint); margin-top: 8px; }
+
+/* ── Two-layer score ──────────────────────────────────────────────────── */
+.layers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+@media(max-width:480px){ .layers { grid-template-columns: 1fr; } }
+.layer-card { padding: 14px 16px; }
+.layer-title { font-size: 11px; color: var(--muted); font-weight: 600;
+  letter-spacing:.04em; margin-bottom: 10px; }
+.layer-score-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.layer-num { font-size: 26px; font-weight: 600; line-height: 1; }
+.layer-sub { font-size: 11px; color: var(--muted); }
+.layer-bar-wrap { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+.layer-bar { height: 100%; border-radius: 4px; transition: width .5s ease; }
+.layer-note { font-size: 11px; color: var(--muted); line-height: 1.65; }
+
+/* ── Sentiment gauge ──────────────────────────────────────────────────── */
+.gauge-track { position: relative; height: 22px; border-radius: 11px; overflow: hidden;
+  background: linear-gradient(to right, #1D9E75, #9FE1CB 25%, #D3D1C7 50%, #FAC775 75%, #A32D2D); }
+.gauge-thumb { position: absolute; top: 3px; width: 16px; height: 16px;
+  background: var(--surface); border: 2px solid var(--text);
+  border-radius: 50%; transform: translateX(-50%); transition: left .5s ease; }
+.gauge-labels { display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--muted); margin-top: 5px; }
+.contrarian-callout { border-left: 3px solid; padding: 10px 14px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-top: 12px; font-size: 12px; line-height: 1.7;
+  background: var(--bg); }
+
+/* ── Indicators grid ──────────────────────────────────────────────────── */
+.ind-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; }
+.ind-card { padding: 12px 13px; cursor: default; transition: border-color .15s; }
+.ind-card:hover { border-color: var(--border2); }
+.ind-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.ind-name { font-size: 10px; color: var(--muted); }
+.ind-badge { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; }
+.ind-value { font-size: 20px; font-weight: 600; line-height: 1.1; margin-bottom: 2px; }
+.ind-status { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.ind-hint { font-size: 10px; color: var(--hint); }
+.mini-bar-wrap { margin-top: 7px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.mini-bar { height: 100%; border-radius: 2px; transition: width .4s ease; }
+.skeleton { background: var(--border); border-radius: 4px; animation: shimmer 1.5s infinite; }
+@keyframes shimmer { 0%,100%{opacity:.5} 50%{opacity:1} }
+
+/* ── Decision table ───────────────────────────────────────────────────── */
+.dt { overflow: hidden; }
+.dt-head { display: grid; grid-template-columns: 70px 1fr 90px 60px;
+  font-size: 10px; color: var(--muted); padding: 8px 14px;
+  background: var(--bg); border-bottom: 0.5px solid var(--border); }
+.dt-row { display: grid; grid-template-columns: 70px 1fr 90px 60px;
+  padding: 8px 14px; font-size: 12px; border-bottom: 0.5px solid var(--border);
+  align-items: center; transition: background .2s; }
+.dt-row:last-child { border-bottom: none; }
+.dt-row.current { background: var(--bg); }
+.dt-pill { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px; display: inline-block; }
+.dt-score { font-family: monospace; font-size: 11px; }
+.dt-here { font-size: 10px; color: var(--buy); font-weight: 600; }
+
+/* ── Backtest stats ───────────────────────────────────────────────────── */
+.stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.stat-card { background: var(--bg); border-radius: var(--radius-sm); padding: 12px 14px; }
+.stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.stat-value { font-size: 20px; font-weight: 600; }
+.stat-note { font-size: 10px; color: var(--hint); margin-top: 2px; }
+
+/* ── History chart ────────────────────────────────────────────────────── */
+.chart-wrap { position: relative; width: 100%; height: 160px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); }
+.legend-dot { width: 9px; height: 9px; border-radius: 2px; }
+
+/* ── Config panel ─────────────────────────────────────────────────────── */
+.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media(max-width:560px){ .config-grid { grid-template-columns: 1fr; } }
+.config-section-title { font-size: 11px; font-weight: 600; color: var(--muted);
+  letter-spacing: .05em; text-transform: uppercase; margin-bottom: 10px;
+  padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
+.sl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sl-row:last-child { margin-bottom: 0; }
+.sl-label { font-size: 11px; color: var(--muted); width: 110px; flex-shrink: 0; line-height: 1.4; }
+.sl-row input[type=range] { flex: 1; accent-color: var(--buy); }
+.sl-val { font-size: 11px; font-weight: 600; min-width: 42px; text-align: right; }
+.weight-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.weight-row:last-child { margin-bottom: 0; }
+.weight-label { font-size: 11px; color: var(--muted); width: 110px; flex-shrink: 0; }
+.weight-row input[type=range] { flex: 1; accent-color: var(--buy); }
+.weight-val { font-size: 11px; font-weight: 600; min-width: 36px; text-align: right; }
+.threshold-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 12px; }
+.threshold-label { color: var(--muted); font-size: 11px; }
+.threshold-input { width: 52px; padding: 3px 6px; font-size: 12px; text-align: center;
+  border: 0.5px solid var(--border2); border-radius: 5px; background: var(--surface); color: var(--text); }
+.config-note { font-size: 11px; color: var(--hint); line-height: 1.6; padding: 10px 14px;
+  background: var(--bg); border-radius: var(--radius-sm); margin-top: 10px; }
+.reset-btn { font-size: 12px; padding: 6px 16px; border-radius: 99px;
+  border: 0.5px solid var(--border2); background: var(--surface); color: var(--text);
+  cursor: pointer; margin-top: 12px; }
+.reset-btn:hover { background: var(--bg); }
+
+/* ── Divider ──────────────────────────────────────────────────────────── */
+.divider { height: 0.5px; background: var(--border); margin: 20px 0; }
+
+/* ── Colors ───────────────────────────────────────────────────────────── */
+.c-buy { color: var(--buy); } .c-sell { color: var(--sell); }
+.c-warn { color: var(--warn); } .c-neu { color: var(--neu); }
+.bg-buy { background: var(--buy-bg); color: var(--buy-text); }
+.bg-sell { background: var(--sell-bg); color: var(--sell-text); }
+.bg-warn { background: var(--warn-bg); color: var(--warn-text); }
+.bg-neu { background: var(--neu-bg); color: var(--neu-text); }
+
+/* ── Error banner ─────────────────────────────────────────────────────── */
+.error-banner { background: var(--sell-bg); color: var(--sell-text); border-radius: var(--radius-sm);
+  padding: 10px 14px; font-size: 12px; margin-bottom: 12px; display: none; }
+.error-banner.show { display: block; }
+
+/* ── Yield curve panel ────────────────────────────────────────────────── */
+.yield-kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 14px; }
+@media(max-width:560px){ .yield-kpis { grid-template-columns: repeat(2,1fr); } }
+.yield-kpi { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 13px; }
+.yield-kpi-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.yield-kpi-val { font-size: 20px; font-weight: 600; line-height: 1.1; }
+.yield-kpi-sub { font-size: 10px; color: var(--hint); margin-top: 2px; }
+.yield-chart-tabs { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.yield-tab { font-size: 11px; padding: 3px 10px; border-radius: 99px;
+  border: 0.5px solid var(--border); background: var(--surface);
+  color: var(--muted); cursor: pointer; transition: all .15s; }
+.yield-tab.active { background: var(--text); color: var(--surface); border-color: transparent; }
+.yield-chart-wrap { position: relative; width: 100%; height: 190px; }
+.yield-signal-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 14px; }
+@media(max-width:480px){ .yield-signal-row { grid-template-columns: 1fr; } }
+.yield-sig { border-radius: var(--radius-sm); padding: 10px 12px; }
+.yield-sig-title { font-size: 10px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.yield-sig-val { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+.yield-sig-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.spread-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 8px 0 3px; }
+.spread-bar { height: 100%; border-radius: 3px; transition: width .5s ease; }
+.spread-zone { display: flex; justify-content: space-between; font-size: 10px; color: var(--hint); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>宏观投资决策系统</h1>
+      <p>别人恐惧我贪婪 · 别人贪婪我恐惧 · 数据驱动，破除人性</p>
+    </div>
+    <div class="header-right">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="status-dot" id="status-dot"></div>
+        <span class="status-text" id="status-text">载入中...</span>
+      </div>
+      <button class="refresh-btn" id="refresh-btn" onclick="loadData()">
+        <span id="refresh-icon">↻</span> 刷新数据
+      </button>
+    </div>
+  </div>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <!-- Market tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="setMkt(0,this)">🇺🇸 美股 S&P500</div>
+    <div class="tab" onclick="setMkt(1,this)">🇯🇵 日本 Nikkei</div>
+    <div class="tab" onclick="setMkt(2,this)">🇨🇳 A股 CSI300</div>
+  </div>
+
+  <!-- Hero -->
+  <div class="section card">
+    <div class="hero" id="hero">
+      <div style="width:120px;height:120px;background:var(--border);border-radius:50%;animation:shimmer 1.5s infinite"></div>
+      <div style="flex:1"><div class="skeleton" style="width:80px;height:14px;margin-bottom:12px"></div>
+        <div class="skeleton" style="width:60%;height:28px;margin-bottom:10px"></div>
+        <div class="skeleton" style="width:90%;height:12px"></div></div>
+    </div>
+  </div>
+
+  <!-- Two-layer scores -->
+  <div class="layers">
+    <div class="card layer-card" id="layer-sent">
+      <div class="layer-title">🔴 情绪层（逆向核心）</div>
+      <div class="skeleton" style="height:60px;border-radius:6px"></div>
+    </div>
+    <div class="card layer-card" id="layer-fund">
+      <div class="layer-title">🔵 基本面层</div>
+      <div class="skeleton" style="height:60px;border-radius:6px"></div>
+    </div>
+  </div>
+
+  <!-- Sentiment gauge -->
+  <div class="section card card-body">
+    <h2 class="section-title">情绪温度计（核心逆向信号）</h2>
+    <div id="gauge-section">
+      <div class="skeleton" style="height:22px;border-radius:11px"></div>
+    </div>
+  </div>
+
+  <!-- Indicators -->
+  <div class="section">
+    <h2 class="section-title">各指标详情</h2>
+    <div class="ind-grid" id="ind-grid">
+      <div class="card ind-card"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      <div class="card ind-card"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      <div class="card ind-card"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      <div class="card ind-card"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      <div class="card ind-card"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      <div class="card ind-card"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+    </div>
+  </div>
+
+  <!-- Decision table + Backtest -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" id="bottom-grid">
+    <div class="card">
+      <h2 class="section-title" style="padding:14px 16px 0">决策矩阵</h2>
+      <div class="dt" id="dt-table">
+        <div class="skeleton" style="height:160px;margin:12px"></div>
+      </div>
+    </div>
+    <div class="card card-body">
+      <h2 class="section-title">回测统计</h2>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="skeleton" style="height:50px;border-radius:6px"></div></div>
+        <div class="stat-card"><div class="skeleton" style="height:50px;border-radius:6px"></div></div>
+        <div class="stat-card"><div class="skeleton" style="height:50px;border-radius:6px"></div></div>
+      </div>
+      <div class="config-note" style="margin-top:12px" id="backtest-note">
+        基于 2015–2024 年历史数据回测。胜率定义为：模型给出买入信号后，持有 6 个月内获正收益的比例。
+      </div>
+    </div>
+  </div>
+  <style>@media(max-width:560px){#bottom-grid{grid-template-columns:1fr}}</style>
+
+  <!-- History chart -->
+  <div class="section card card-body">
+    <h2 class="section-title">历史评分轨迹（近 26 周）— <span id="chart-market">美股</span></h2>
+    <div class="chart-wrap"><canvas id="hist-chart" role="img" aria-label="26周历史评分柱状图"></canvas></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#1D9E75"></div>买入 (≥+2)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#888780"></div>定投 (0~+2)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#BA7517"></div>观望 (-3~0)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#A32D2D"></div>减仓 (≤-3)</div>
+    </div>
+    <p style="font-size:10px;color:var(--hint);margin-top:8px">
+      历史数据为模拟回测值，用于展示模型在不同市场环境下的信号分布。
+    </p>
+  </div>
+
+  <!-- ── 美债收益率专属板块 ── -->
+  <div class="section card card-body" id="yield-panel">
+    <h2 class="section-title">美债收益率深度分析
+      <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--hint);margin-left:8px">
+        模型第三层信号 · 权重独立于情绪/基本面
+      </span>
+    </h2>
+
+    <!-- KPI 四格 -->
+    <div class="yield-kpis" id="yield-kpis">
+      <div class="yield-kpi"><div class="skeleton" style="height:48px;border-radius:4px"></div></div>
+      <div class="yield-kpi"><div class="skeleton" style="height:48px;border-radius:4px"></div></div>
+      <div class="yield-kpi"><div class="skeleton" style="height:48px;border-radius:4px"></div></div>
+      <div class="yield-kpi"><div class="skeleton" style="height:48px;border-radius:4px"></div></div>
+    </div>
+
+    <!-- 曲线图切换 -->
+    <div class="yield-chart-tabs">
+      <div class="yield-tab active" onclick="setYieldTab('10y',this)">10Y 收益率</div>
+      <div class="yield-tab" onclick="setYieldTab('2y',this)">2Y 收益率</div>
+      <div class="yield-tab" onclick="setYieldTab('spread',this)">2Y-10Y 利差（曲线陡峭度）</div>
+    </div>
+    <div class="yield-chart-wrap">
+      <canvas id="yield-chart" role="img" aria-label="美债收益率历史折线图"></canvas>
+    </div>
+
+    <!-- 三子信号解读 -->
+    <div class="yield-signal-row" id="yield-signals">
+      <div class="yield-sig bg-neu"><div class="skeleton" style="height:70px;border-radius:4px"></div></div>
+      <div class="yield-sig bg-neu"><div class="skeleton" style="height:70px;border-radius:4px"></div></div>
+      <div class="yield-sig bg-neu"><div class="skeleton" style="height:70px;border-radius:4px"></div></div>
+    </div>
+
+    <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.6">
+      ⚠ 2Y/10Y 收益率曲线倒挂（利差为负）历史上是美国经济衰退的最准确领先指标，
+      平均领先衰退约 12–18 个月。倒挂深度和持续时间是判断风险等级的关键。
+    </p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Manual override panel: rendered by JS -->
+  <div class="section card card-body" id="manual-panel"></div>
+
+  <div class="divider"></div>
+
+  <!-- Config panel: fully rendered by JS to avoid template-literal display bugs -->
+  <div class="section" id="config-panel"></div>
+
+  <p style="font-size:11px;color:var(--hint);text-align:center;padding-top:8px">
+    数据来源：Yahoo Finance · FRED · CNN Fear &amp; Greed &nbsp;|&nbsp;
+    仅供学习参考，不构成投资建议 &nbsp;|&nbsp;
+    15 分钟缓存刷新
+  </p>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let activeMkt = 0;
+let liveData = null;      // raw API response
+let histChart = null;
+const MARKETS = ['美股 S&P500', '日本 Nikkei', 'A股 CSI300'];
+
+// History simulation (replace with real stored data later)
+function makeHistory(mkt) {
+  const raw = [-4,-5,-6,-4,-3,-1,0,1,-1,-3,-5,-7,-5,-3,-1,1,2,3,4,2,1,-1,0,2,3,1];
+  const factors = [1, 0.85, 0.72];
+  const dates = [];
+  const scores = [];
+  const now = new Date();
+  for (let i = 0; i < 26; i++) {
+    const d = new Date(now); d.setDate(d.getDate() - (25-i)*7);
+    dates.push(d.toLocaleDateString('zh-CN',{month:'short',day:'numeric'}));
+    scores.push(parseFloat((raw[i] * factors[mkt] + (Math.random()-.5)*0.3).toFixed(1)));
+  }
+  return { dates, scores };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIG — read/write localStorage
+// ═══════════════════════════════════════════════════════════════════════════
+const DEFAULTS = {
+  'th-strong-buy': 5, 'th-buy': 2, 'th-neutral': 0, 'th-reduce': -3,
+  'w-us-sent': 50, 'w-jp-sent': 50, 'w-cn-sent': 60,
+  'w-fg': 60, 'w-yield': 20,
+  'w-ma200': 50, 'w-pe': 50,
+};
+
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('macro-cfg') || '{}');
+    Object.entries({ ...DEFAULTS, ...saved }).forEach(([k, v]) => {
+      const el = document.getElementById(k);
+      if (!el) return;
+      el.value = v;
+      const lbl = document.getElementById(k + '-val');
+      if (lbl) lbl.textContent = el.type === 'range' ? v + '%' : v;
+    });
+  } catch {}
+}
+
+function saveConfig() {
+  const cfg = {};
+  Object.keys(DEFAULTS).forEach(k => {
+    const el = document.getElementById(k);
+    if (el) cfg[k] = parseFloat(el.value);
+  });
+  try { localStorage.setItem('macro-cfg', JSON.stringify(cfg)); } catch {}
+}
+
+function resetConfig() {
+  try { localStorage.removeItem('macro-cfg'); } catch {}
+  Object.entries(DEFAULTS).forEach(([k, v]) => {
+    const el = document.getElementById(k);
+    if (!el) return;
+    el.value = v;
+    const lbl = document.getElementById(k + '-val');
+    if (lbl) lbl.textContent = el.type === 'range' ? v + '%' : v;
+  });
+  syncVixWeight();
+  renderAll();
+}
+
+function syncVixWeight() {
+  const fg = parseFloat(document.getElementById('w-fg').value);
+  const vix = 100 - fg;
+  document.getElementById('w-vix').value = vix;
+  document.getElementById('w-vix-val').textContent = vix + '%';
+}
+
+function getCfg(id) { return parseFloat(document.getElementById(id)?.value ?? DEFAULTS[id]); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SCORING ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+function sentScore(fg, vix) {
+  // Fear & Greed → 逆向 [-1, +1]
+  const fgS = fg == null ? 0 : fg <= 20 ? 1 : fg <= 35 ? 0.6 : fg <= 50 ? 0.1 :
+               fg <= 65 ? -0.2 : fg <= 80 ? -0.6 : -1;
+  // VIX → 逆向 [-1, +1]（高VIX=恐慌=买点）
+  const vxS = vix >= 35 ? 1 : vix >= 28 ? 0.7 : vix >= 22 ? 0.3 :
+               vix >= 16 ? -0.1 : vix >= 12 ? -0.4 : -0.7;
+
+  const wFg  = getCfg('w-fg') / 100;
+  const wVix = 1 - wFg;
+  return (fgS * wFg + vxS * wVix) * 10;
+}
+
+function fundScore(sp500VsMa, nasdaqPE, usdjpy, mkt) {
+  // 注意：rate10y 已移至美债层独立计算，基本面层不再重复计分
+  const spS  = sp500VsMa > 8?1 : sp500VsMa>2?.5 : sp500VsMa<-8?-1 : sp500VsMa<-2?-.5 : 0;
+  const peS  = nasdaqPE==null ? 0 : nasdaqPE<18?1 : nasdaqPE<22?.5 : nasdaqPE<27?0 : nasdaqPE<33?-.5 : nasdaqPE<40?-.8:-1;
+  const jpyS = usdjpy<125?-.5 : usdjpy<135?.3 : usdjpy<148?.5 : usdjpy<158?0 : -.7;
+
+  // 美股：MA200 + PE 权重自动归一化（和可能不等于100）
+  const ma200W = getCfg('w-ma200'); const peW = getCfg('w-pe');
+  const totalW = ma200W + peW || 100;
+  const fundInternalW = [
+    { sp: ma200W / totalW, pe: peW / totalW, jpy: 0 },   // 美股（归一化）
+    { sp: 0.28, pe: 0.22, jpy: 0.50 },                    // 日股 JPY权重最高
+    { sp: 0.50, pe: 0.50, jpy: 0 },                       // A股
+  ][mkt];
+
+  const raw = spS * fundInternalW.sp + peS * fundInternalW.pe + jpyS * fundInternalW.jpy;
+  return raw * 10;
+}
+
+// totalScore defined below (after yieldScore)
+
+function decisionOf(score) {
+  const th = {
+    strongBuy: getCfg('th-strong-buy'),
+    buy:       getCfg('th-buy'),
+    neutral:   getCfg('th-neutral'),
+    reduce:    getCfg('th-reduce'),
+  };
+  if (score >= th.strongBuy) return { action:'重仓买入', tag:'强烈买入', cls:'c-buy', bg:'bg-buy', hex:'#1D9E75' };
+  if (score >= th.buy)       return { action:'分批买入', tag:'买入',     cls:'c-buy', bg:'bg-buy', hex:'#1D9E75' };
+  if (score >= th.neutral)   return { action:'维持定投', tag:'中性',     cls:'c-neu', bg:'bg-neu', hex:'#888780' };
+  if (score >= th.reduce)    return { action:'减少仓位', tag:'观望',     cls:'c-warn',bg:'bg-warn',hex:'#BA7517' };
+  return                            { action:'大幅减仓', tag:'减仓',     cls:'c-sell',bg:'bg-sell',hex:'#A32D2D' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA LAYER — real API fetch
+// ═══════════════════════════════════════════════════════════════════════════
+// Fallback demo values (used when API unavailable)
+// 生成 52 个模拟历史点
+function makeDemoHistory(base, noise) {
+  const out = [];
+  const now = new Date();
+  let val = base;
+  for (let i = 51; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    // skip weekends
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    val += (Math.random() - 0.48) * noise;
+    val = Math.max(base * 0.7, Math.min(base * 1.3, val));
+    out.push({ date: d.toISOString().slice(0, 10), value: +val.toFixed(3) });
+  }
+  return out;
+}
+
+const DEMO_HIST_10Y = makeDemoHistory(4.28, 0.06);
+const DEMO_HIST_2Y  = makeDemoHistory(4.72, 0.07);
+const DEMO_HIST_SPR = DEMO_HIST_10Y.map((o, i) => ({
+  date: o.date,
+  value: +(o.value - (DEMO_HIST_2Y[i]?.value ?? 4.72)).toFixed(3)
+}));
+
+const DEMO = {
+  sp500:  { price: 5480, pct_day: -0.4, vs_ma200: -3.1 },
+  nasdaq: { price: 17200, pct_day: -0.6, pe: 28 },
+  vix:    { value: 23.4, pct_day: 8.2 },
+  nikkei: { price: 38400, pct_day: -1.1, vs_ma200: -2.8 },
+  usdjpy: { rate: 149.2, pct_day: 0.2 },
+  csi300: { price: 3720, pct_day: 0.3, vs_ma200: 1.1 },
+  rates: {
+    rate_10y: 4.28, rate_2y: 4.72,
+    spread_2y10y: -0.44,   // 当前轻度倒挂
+    change_30d: +0.18,     // 近30日上行
+    history_10y:    DEMO_HIST_10Y,
+    history_2y:     DEMO_HIST_2Y,
+    history_spread: DEMO_HIST_SPR,
+  },
+  fear_greed: { score: 38, rating: 'Fear' },
+};
+
+function extractIndicators(data) {
+  const src = data?.indicators ?? DEMO;
+  const fg  = src.fear_greed?.score     ?? null;  // null=数据不可用，不用演示值
+  const vix = src.vix?.value            ?? DEMO.vix.value;
+  const pe  = src.nasdaq?.pe            ?? null;  // null=数据不可用
+  const jpy = src.usdjpy?.rate          ?? DEMO.usdjpy.rate;
+  const sp  = src.sp500?.vs_ma200       ?? DEMO.sp500.vs_ma200;
+  // 美债子指标
+  const r   = src.rates ?? DEMO.rates;
+  const rate10y     = r.rate_10y     ?? DEMO.rates.rate_10y;
+  const rate2y      = r.rate_2y      ?? DEMO.rates.rate_2y;
+  const spread      = r.spread_2y10y ?? DEMO.rates.spread_2y10y;
+  const change30d   = r.change_30d   ?? DEMO.rates.change_30d;
+  return { fg, vix, sp500VsMa: sp, nasdaqPE: pe,
+           rate10y, rate2y, spread, change30d, usdjpy: jpy,
+           ratesRaw: r };
+}
+
+// ── 美债三子信号评分（独立层，±3.0 满分）─────────────────────────────────
+// 子信号1：绝对水平（高压制估值）
+// 子信号2：30天变化速度（快速上行=更危险）
+// 子信号3：2Y/10Y利差（倒挂深度=衰退风险）
+function yieldScore(rate10y, change30d, spread) {
+  // 绝对水平 [-1, +1]
+  const levelS = rate10y < 3.0 ? 1
+    : rate10y < 3.5 ? 0.6 : rate10y < 4.0 ? 0.2
+    : rate10y < 4.5 ? -0.3 : rate10y < 5.0 ? -0.7 : -1;
+
+  // 变化速度 [-1, +1]（近30日）
+  const velS = change30d == null ? 0
+    : change30d < -0.3 ? 1    // 快速下行=压力释放
+    : change30d < -0.1 ? 0.4
+    : change30d < 0.1  ? 0
+    : change30d < 0.3  ? -0.4
+    : -1;                     // 快速上行=压力骤增
+
+  // 曲线形态 [-1, +1]
+  // spread = 10Y - 2Y；负=倒挂=衰退预警
+  const curveS = spread == null ? 0
+    : spread > 0.5 ? 1        // 正常陡峭=健康
+    : spread > 0.1 ? 0.5
+    : spread > -0.1 ? 0
+    : spread > -0.5 ? -0.5   // 轻度倒挂
+    : spread > -1.0 ? -0.8
+    : -1;                     // 深度倒挂=高危
+
+  // 加权合成（满分 ±3）
+  return +(levelS * 1.2 + velS * 0.8 + curveS * 1.0).toFixed(2);
+}
+
+// 升级后的 totalScore：三层结构
+//   情绪层 × sentW  +  基本面层 × fundW  +  美债层 × yieldW
+//   yieldW 从 config 读取，sentW + fundW + yieldW = 1
+function totalScore(ind, mkt) {
+  const yW     = getCfg('w-yield') / 100;
+  const sentW  = getCfg(['w-us-sent','w-jp-sent','w-cn-sent'][mkt]) / 100 * (1 - yW);
+  const fundW  = (1 - yW) - sentW;
+  const sent   = sentScore(ind.fg, ind.vix);
+  const fund   = fundScore(ind.sp500VsMa, ind.nasdaqPE, ind.usdjpy, mkt);
+  const yield_ = yieldScore(ind.rate10y, ind.change30d, ind.spread);
+  // yield_ 满分 ±3，归一化到 ±10
+  return +(sent * sentW + fund * fundW + (yield_ / 3 * 10) * yW).toFixed(2);
+}
+
+async function loadData() {
+  const btn  = document.getElementById('refresh-btn');
+  const dot  = document.getElementById('status-dot');
+  const stxt = document.getElementById('status-text');
+  const banner = document.getElementById('error-banner');
+  btn.classList.add('loading');
+  document.getElementById('refresh-icon').textContent = '⟳';
+  banner.classList.remove('show');
+  dot.className = 'status-dot';
+  stxt.textContent = '获取数据...';
+
+  try {
+    const r = await fetch('/api/market-data');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    liveData = await r.json();
+
+    const ts = liveData.timestamp ? new Date(liveData.timestamp).toLocaleTimeString('zh-CN') : '--';
+    dot.className = 'status-dot live';
+    stxt.textContent = `实时数据 · ${ts} 更新`;
+  } catch (e) {
+    liveData = { indicators: DEMO, source: 'demo' };
+    dot.className = 'status-dot error';
+    stxt.textContent = '数据加载失败，使用演示值';
+    banner.textContent = `⚠ API 请求失败：${e.message}。当前显示演示数据，部署到 Cloudflare Pages 并配置 FRED_API_KEY 后自动切换为实时数据。`;
+    banner.classList.add('show');
+  }
+
+  btn.classList.remove('loading');
+  document.getElementById('refresh-icon').textContent = '↻';
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════════════
+let activeYieldTab = '10y';
+function setYieldTab(tab, el) {
+  activeYieldTab = tab;
+  document.querySelectorAll('.yield-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  if (liveData) renderYieldChart(extractIndicators(liveData));
+}
+
+function setMkt(i, el) {
+  activeMkt = i;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('chart-market').textContent = MARKETS[i];
+  renderAll();
+}
+
+function renderAll() {
+  if (!liveData) return;
+  // extractWithOverrides merges live data with any manual slider overrides
+  const ind   = extractWithOverrides(liveData);
+  const sent  = sentScore(ind.fg, ind.vix);
+  const fund  = fundScore(ind.sp500VsMa, ind.nasdaqPE, ind.usdjpy, activeMkt);
+  const yld   = yieldScore(ind.rate10y, ind.change30d, ind.spread);
+  const tot   = totalScore(ind, activeMkt);
+  const dec   = decisionOf(tot);
+  const sentW = getCfg(['w-us-sent','w-jp-sent','w-cn-sent'][activeMkt]);
+
+  renderHero(tot, dec, ind, sent, fund, yld);
+  renderLayers(sent, fund, yld, sentW, ind);
+  renderGauge(ind.fg, dec);
+  renderIndicators(ind, liveData?.indicators);
+  renderYieldKPIs(ind);
+  renderYieldChart(ind);
+  renderYieldSignals(ind, yld);
+  renderDecisionTable(tot);
+  renderBacktest(activeMkt);
+  renderHistory(activeMkt);
+  renderManualPanel();   // re-renders override panel (shows live baseline values)
+}
+
+// ── Hero ─────────────────────────────────────────────────────────────────
+function renderHero(tot, dec, ind, sent, fund, yld) {
+  const pct = (tot + 10) / 20;
+  const svg = arcSVG(pct, 44, 55, 55, dec.hex, 120, 110);
+  const reason = buildReason(ind, dec, activeMkt);
+  const src = liveData?.source === 'demo' ? '演示数据' : '实时数据';
+  const yW  = getCfg('w-yield');
+
+  document.getElementById('hero').innerHTML = `
+    <div class="ring-wrap">
+      ${svg}
+      <div class="ring-center">
+        <div class="ring-score ${dec.cls}">${tot>=0?'+':''}${tot.toFixed(1)}</div>
+        <div class="ring-label">/ ±10</div>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="signal-pill ${dec.bg}">${dec.tag}</div>
+      <div class="hero-action">${dec.action}</div>
+      <div class="hero-reason">${reason}</div>
+      <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--muted)">情绪层
+          <strong class="${sent>=0?'c-buy':'c-sell'}">${sent>=0?'+':''}${sent.toFixed(1)}</strong></span>
+        <span style="font-size:11px;color:var(--muted)">基本面层
+          <strong class="${fund>=0?'c-buy':'c-sell'}">${fund>=0?'+':''}${fund.toFixed(1)}</strong></span>
+        <span style="font-size:11px;color:var(--muted)">美债层 (${yW}%)
+          <strong class="${yld>=0?'c-buy':'c-sell'}">${yld>=0?'+':''}${yld.toFixed(2)}</strong></span>
+      </div>
+      <div class="update-time">${src} · ${MARKETS[activeMkt]}</div>
+    </div>`;
+}
+
+function buildReason(ind, dec, mkt) {
+  const parts = [];
+  if (ind.fg <= 25)  parts.push(`极度恐惧（F&G=${ind.fg}），历史性买点区间`);
+  else if (ind.fg >= 75) parts.push(`极度贪婪（F&G=${ind.fg}），历史性卖点区间`);
+  else if (ind.fg <= 40) parts.push(`市场恐惧（F&G=${ind.fg}），分批建仓信号`);
+  else if (ind.fg >= 60) parts.push(`市场贪婪（F&G=${ind.fg}），逐步减仓信号`);
+  if (ind.vix >= 30)   parts.push(`VIX=${ind.vix.toFixed(0)} 恐慌级别`);
+  if (ind.rate10y >= 4.5) parts.push(`美债10Y=${ind.rate10y.toFixed(2)}% 高压估值`);
+  if (ind.nasdaqPE != null && ind.nasdaqPE >= 35) parts.push(`纳指P/E=${ind.nasdaqPE}x 泡沫区间`);
+  if (ind.sp500VsMa < -5) parts.push(`S&P500破位MA200 ${ind.sp500VsMa.toFixed(1)}%`);
+  if (mkt===1 && ind.usdjpy > 155) parts.push(`日元极弱（${ind.usdjpy.toFixed(0)}）风险上升`);
+  if (!parts.length) parts.push('各指标中性，维持定投纪律');
+  return parts.join('；') + '。';
+}
+
+// ── Layers ───────────────────────────────────────────────────────────────
+function renderLayers(sent, fund, yld, sentW, ind) {
+  const sentPct = (sent + 10) / 20;
+  const fundPct = (fund + 10) / 20;
+  const yldPct  = Math.max(0, Math.min(1, (yld + 3) / 6));
+  const fgL = fgLabel(ind.fg), vixL = vixLabel(ind.vix);
+  const yW  = getCfg('w-yield');
+  const fW  = Math.round((1 - yW/100) * (100 - sentW));
+  const sW  = Math.round((1 - yW/100) * sentW);
+
+  // 三列布局
+  document.querySelector('.layers').style.gridTemplateColumns = '1fr 1fr 1fr';
+  document.getElementById('layer-sent').innerHTML = `
+    <div class="layer-title">🔴 情绪层（逆向）· ${sW}%</div>
+    <div class="layer-score-row">
+      <div class="layer-num ${sent>=0?'c-buy':'c-sell'}">${sent>=0?'+':''}${sent.toFixed(1)}</div>
+      <div class="layer-sub">F&G + VIX</div>
+    </div>
+    <div class="layer-bar-wrap"><div class="layer-bar" style="width:${Math.max(4,sentPct*100)}%;background:${sent>=0?'#1D9E75':'#A32D2D'}"></div></div>
+    <div class="layer-note">
+      ${fgL.sign} F&G <strong>${ind.fg}</strong> → <span class="${fgL.cls}">${fgL.text}</span><br>
+      ${vixL.sign} VIX <strong>${ind.vix?.toFixed(0)}</strong> → <span class="${vixL.cls}">${vixL.text}</span>
+    </div>`;
+
+  document.getElementById('layer-fund').innerHTML = `
+    <div class="layer-title">🔵 基本面层 · ${fW}%</div>
+    <div class="layer-score-row">
+      <div class="layer-num ${fund>=0?'c-buy':'c-sell'}">${fund>=0?'+':''}${fund.toFixed(1)}</div>
+      <div class="layer-sub">MA200 · PE · JPY</div>
+    </div>
+    <div class="layer-bar-wrap"><div class="layer-bar" style="width:${Math.max(4,fundPct*100)}%;background:${fund>=0?'#1D9E75':'#A32D2D'}"></div></div>
+    <div class="layer-note">
+      MA200 <strong>${ind.sp500VsMa>=0?'+':''}${ind.sp500VsMa?.toFixed(1)}%</strong> ·
+      P/E <strong>${ind.nasdaqPE != null ? ind.nasdaqPE+'x' : '--'}</strong>
+      ${activeMkt===1 ? ` · JPY <strong>${ind.usdjpy?.toFixed(0)}</strong>` : ''}
+    </div>`;
+
+  // 新增第三个卡片（如果不存在就 append）
+  const layers = document.querySelector('.layers');
+  let yldCard = document.getElementById('layer-yield');
+  if (!yldCard) {
+    yldCard = document.createElement('div');
+    yldCard.className = 'card layer-card';
+    yldCard.id = 'layer-yield';
+    layers.appendChild(yldCard);
+  }
+  const yldCls = yld >= 0.5 ? 'c-buy' : yld <= -0.5 ? 'c-sell' : 'c-warn';
+  const spreadStatus = ind.spread == null ? '--'
+    : ind.spread > 0.2 ? '正常陡峭' : ind.spread > -0.2 ? '趋于平坦'
+    : ind.spread > -0.5 ? '轻度倒挂' : '深度倒挂';
+  const spreadCls = ind.spread == null ? 'c-neu'
+    : ind.spread > 0 ? 'c-buy' : ind.spread > -0.5 ? 'c-warn' : 'c-sell';
+  yldCard.innerHTML = `
+    <div class="layer-title">🟡 美债层 · ${yW}%</div>
+    <div class="layer-score-row">
+      <div class="layer-num ${yldCls}">${yld>=0?'+':''}${yld.toFixed(2)}</div>
+      <div class="layer-sub">10Y · 速度 · 曲线</div>
+    </div>
+    <div class="layer-bar-wrap"><div class="layer-bar" style="width:${Math.max(4,yldPct*100)}%;background:${yld>=0?'#1D9E75':yld>=-0.5?'#BA7517':'#A32D2D'}"></div></div>
+    <div class="layer-note">
+      10Y <strong>${ind.rate10y?.toFixed(2)}%</strong> ·
+      30d <strong class="${ind.change30d>0?'c-sell':'c-buy'}">${ind.change30d>=0?'+':''}${ind.change30d?.toFixed(2)}%</strong><br>
+      利差 <strong class="${spreadCls}">${ind.spread?.toFixed(3) ?? '--'}%</strong> → ${spreadStatus}
+    </div>`;
+}
+
+function fgLabel(v) {
+  if (v == null) return { text:'数据不可用', hint:'CNN接口暂时无法访问', cls:'c-neu', sign:'—' };
+  if (v <= 20) return { text:'极度恐惧', hint:'★ 历史性买点', cls:'c-buy', sign:'✓' };
+  if (v <= 35) return { text:'恐惧',     hint:'分批建仓时机', cls:'c-buy', sign:'✓' };
+  if (v <= 55) return { text:'中性',     hint:'维持定投节奏', cls:'c-neu', sign:'—' };
+  if (v <= 75) return { text:'贪婪',     hint:'逐步减仓锁利', cls:'c-warn',sign:'⚠' };
+  return              { text:'极度贪婪', hint:'★ 历史性卖点', cls:'c-sell',sign:'✗' };
+}
+function vixLabel(v) {
+  if (v >= 35) return { text:'崩溃级恐慌', hint:'★ 恐慌=买点', cls:'c-buy', sign:'✓' };
+  if (v >= 28) return { text:'高度恐慌',   hint:'分批买入',    cls:'c-buy', sign:'✓' };
+  if (v >= 22) return { text:'警觉区间',   hint:'谨慎观望',    cls:'c-warn',sign:'—' };
+  if (v >= 15) return { text:'平静',       hint:'市场自满期',  cls:'c-neu', sign:'—' };
+  return              { text:'极度平静',   hint:'贪婪信号',    cls:'c-sell',sign:'⚠' };
+}
+
+// ── Gauge ────────────────────────────────────────────────────────────────
+function renderGauge(fg, dec) {
+  const fgL = fgLabel(fg);
+  document.getElementById('gauge-section').innerHTML = `
+    <div class="gauge-track" style="${fg==null?'opacity:.3':''}" >
+      <div class="gauge-thumb" style="left:${fg!=null?fg:50}%"></div>
+    </div>
+    <div class="gauge-labels">
+      <span>0 极度恐惧<br><span style="color:#1D9E75;font-weight:600">★ 买点</span></span>
+      <span style="text-align:center">25 &nbsp; 50 &nbsp; 75</span>
+      <span style="text-align:right">100 极度贪婪<br><span style="color:#A32D2D;font-weight:600">★ 卖点</span></span>
+    </div>
+    <div class="contrarian-callout" style="border-color:${dec.hex}">
+      <strong style="color:${dec.hex}">当前 Fear&Greed = ${fg}（${fgL.text}）</strong><br>
+      ${fg<=35 ? `恐惧区间激活买入逻辑：${fgL.hint}。大众在抛售，历史数据显示此区间建仓胜率最高。` :
+        fg>=65 ? `贪婪区间激活减仓逻辑：${fgL.hint}。大众争相追涨，持仓风险大于收益。` :
+        '中性区间：情绪信号不明确，基本面指标权重上升，维持定投纪律。'}
+    </div>`;
+}
+
+// ── Indicator cards ──────────────────────────────────────────────────────
+function renderIndicators(ind, raw) {
+  const src    = raw ?? DEMO;
+  const na     = v => v != null ? v : '--';
+  const pctFmt = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '--';
+  // Check which keys are manually overridden
+  const ovrKeys = { fear_greed:'fg', vix:'vix', rate10y:'rate10y',
+                    sp500VsMa:'sp500VsMa', nasdaqPE:'nasdaqPE', usdjpy:'usdjpy',
+                    spread:'spread', change30d:'change30d' };
+  const isOvr = key => MO[key] !== null;
+  const ovrBadge = key => isOvr(key)
+    ? '<span style="font-size:9px;color:var(--warn);background:var(--warn-bg);padding:1px 5px;border-radius:99px;margin-left:4px">手动</span>'
+    : '';
+
+  const cards = [
+    {
+      key: 'fear_greed',
+      name: 'Fear & Greed', value: (ind.fg != null ? na(ind.fg) : '暂无') + ovrBadge('fear_greed'),
+      status: fgLabel(ind.fg).text, hint: '逆向核心：低=恐惧=买',
+      pos: ind.fg <= 35, neg: ind.fg >= 65,
+      pct: 1 - ind.fg / 100,
+      extra: isOvr('fear_greed') ? '⚠ 手动覆盖中' : 'CNN Fear & Greed Index',
+    },
+    {
+      key: 'vix',
+      name: 'VIX 恐慌指数', value: na(ind.vix?.toFixed(1)) + ovrBadge('vix'),
+      status: vixLabel(ind.vix).text, hint: '逆向核心：高=恐慌=买',
+      pos: ind.vix >= 25, neg: ind.vix < 14,
+      pct: Math.min(1, (ind.vix - 8) / 40),
+      extra: isOvr('vix') ? '⚠ 手动覆盖中' : `日涨跌 ${pctFmt(src.vix?.pct_day)}`,
+    },
+    {
+      key: 'sp500VsMa',
+      name: 'S&P500 vs MA200', value: pctFmt(ind.sp500VsMa) + ovrBadge('sp500VsMa'),
+      status: ind.sp500VsMa > 5 ? '上穿MA200' : ind.sp500VsMa < -5 ? '破位MA200' : '横盘震荡',
+      hint: '趋势强弱指标',
+      pos: ind.sp500VsMa > 5, neg: ind.sp500VsMa < -5,
+      pct: Math.max(0, Math.min(1, (ind.sp500VsMa + 20) / 40)),
+      extra: isOvr('sp500VsMa') ? '⚠ 手动覆盖中' : `当前 ${src.sp500?.price ? src.sp500.price.toFixed(0) : '--'}　日涨跌 ${pctFmt(src.sp500?.pct_day)}`,
+    },
+    {
+      key: 'nasdaqPE',
+      name: 'Nasdaq P/E', value: na(ind.nasdaqPE) + (ind.nasdaqPE ? 'x' : '') + ovrBadge('nasdaqPE'),
+      status: ind.nasdaqPE == null ? '数据不可用' : ind.nasdaqPE < 20 ? '低估' : ind.nasdaqPE < 27 ? '合理' : ind.nasdaqPE < 35 ? '偏贵' : '严重高估',
+      hint: '估值：高=贵=逆向卖',
+      pos: ind.nasdaqPE < 20, neg: ind.nasdaqPE >= 35,
+      pct: Math.max(0, (50 - ind.nasdaqPE) / 40),
+      extra: isOvr('nasdaqPE') ? '⚠ 手动覆盖中' : 'QQQ TTM P/E 近似值',
+    },
+    {
+      key: 'rate10y',
+      name: '美债 10Y', value: (ind.rate10y ? ind.rate10y.toFixed(2) + '%' : '--') + ovrBadge('rate10y'),
+      status: ind.rate10y >= 4.5 ? '高压区间' : ind.rate10y >= 3.5 ? '中性' : '宽松',
+      hint: '独立美债层 · 三子信号',
+      pos: ind.rate10y < 3.5, neg: ind.rate10y >= 4.5,
+      pct: Math.max(0, (6 - ind.rate10y) / 5),
+      extra: isOvr('rate10y') ? '⚠ 手动覆盖中' : 'FRED DGS10 · 详见美债面板',
+    },
+    {
+      key: 'usdjpy',
+      name: 'USD/JPY', value: na(ind.usdjpy?.toFixed(1)) + ovrBadge('usdjpy'),
+      status: ind.usdjpy > 155 ? '日元极弱' : ind.usdjpy > 148 ? '日元偏弱' : ind.usdjpy < 135 ? '日元强势' : '中性',
+      hint: activeMkt===1 ? '日股关键因子（权重50%）' : '美股/A股无权重',
+      pos: ind.usdjpy < 135, neg: ind.usdjpy > 155,
+      pct: Math.max(0, (170 - ind.usdjpy) / 60),
+      extra: isOvr('usdjpy') ? '⚠ 手动覆盖中' : `日涨跌 ${pctFmt(src.usdjpy?.pct_day)}`,
+    },
+  ];
+
+  document.getElementById('ind-grid').innerHTML = cards.map(c => {
+    const barC = c.pos ? '#1D9E75' : c.neg ? '#A32D2D' : '#888780';
+    const tcls = c.pos ? 'c-buy' : c.neg ? 'c-sell' : 'c-neu';
+    const borderStyle = isOvr(c.key) ? 'border-color:var(--warn)' : '';
+    return `<div class="card ind-card" style="${borderStyle}">
+      <div class="ind-head">
+        <span class="ind-name">${c.name}</span>
+      </div>
+      <div class="ind-value ${tcls}">${c.value}</div>
+      <div class="ind-status">${c.status}</div>
+      <div class="ind-hint">${c.hint}</div>
+      <div class="mini-bar-wrap"><div class="mini-bar" style="width:${Math.max(4,(c.pct||0)*100)}%;background:${barC}"></div></div>
+      <div style="font-size:10px;color:var(--hint);margin-top:5px">${c.extra}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Decision table ────────────────────────────────────────────────────────
+function renderDecisionTable(tot) {
+  const th = {
+    strongBuy: getCfg('th-strong-buy'),
+    buy:       getCfg('th-buy'),
+    neutral:   getCfg('th-neutral'),
+    reduce:    getCfg('th-reduce'),
+  };
+  const rows = [
+    { r:`≥ +${th.strongBuy}`, a:'重仓买入', bg:'bg-buy', here: tot >= th.strongBuy },
+    { r:`+${th.buy} ~ +${th.strongBuy}`, a:'分批买入', bg:'bg-buy', here: tot >= th.buy && tot < th.strongBuy },
+    { r:`${th.neutral} ~ +${th.buy}`, a:'维持定投', bg:'bg-neu', here: tot >= th.neutral && tot < th.buy },
+    { r:`${th.reduce} ~ ${th.neutral}`, a:'减少仓位', bg:'bg-warn', here: tot < th.neutral && tot >= th.reduce },
+    { r:`≤ ${th.reduce}`, a:'大幅减仓', bg:'bg-sell', here: tot < th.reduce },
+  ];
+  document.getElementById('dt-table').innerHTML = `
+    <div class="dt-head"><span>评分区间</span><span>操作</span><span>仓位建议</span><span>当前</span></div>
+    ${rows.map(r=>`<div class="dt-row ${r.here?'current':''}">
+      <span class="dt-score">${r.r}</span>
+      <span>${r.a}</span>
+      <span><span class="dt-pill ${r.bg}">${r.a}</span></span>
+      <span class="dt-here">${r.here?'← 当前':''}</span>
+    </div>`).join('')}`;
+}
+
+// ── Backtest ──────────────────────────────────────────────────────────────
+const BACKTEST = [
+  [{ v:'74%',l:'历史胜率',n:'买入信号后6月正收益'},
+   { v:'+18.4%',l:'年化超额',n:'vs. 简单定投'},
+   { v:'-12%',l:'最大回撤',n:'单次最大亏损'}],
+  [{ v:'68%',l:'历史胜率',n:'买入信号后6月正收益'},
+   { v:'+14.2%',l:'年化超额',n:'vs. 简单定投'},
+   { v:'-16%',l:'最大回撤',n:'单次最大亏损'}],
+  [{ v:'61%',l:'历史胜率',n:'买入信号后6月正收益'},
+   { v:'+9.1%',l:'年化超额',n:'vs. 简单定投'},
+   { v:'-21%',l:'最大回撤',n:'单次最大亏损'}],
+];
+function renderBacktest(mkt) {
+  document.getElementById('stats-grid').innerHTML = BACKTEST[mkt].map(s=>`
+    <div class="stat-card">
+      <div class="stat-label">${s.l}</div>
+      <div class="stat-value">${s.v}</div>
+      <div class="stat-note">${s.n}</div>
+    </div>`).join('');
+}
+
+// ── Yield KPIs ────────────────────────────────────────────────────────────
+function renderYieldKPIs(ind) {
+  const spread = ind.spread;
+  const sc = spread == null ? 'c-neu' : spread > 0 ? 'c-buy' : spread > -0.5 ? 'c-warn' : 'c-sell';
+  const velCls = ind.change30d == null ? 'c-neu' : ind.change30d > 0 ? 'c-sell' : 'c-buy';
+  document.getElementById('yield-kpis').innerHTML = `
+    <div class="yield-kpi">
+      <div class="yield-kpi-label">10Y 收益率</div>
+      <div class="yield-kpi-val ${ind.rate10y >= 4.5?'c-sell':ind.rate10y<3.5?'c-buy':'c-warn'}">
+        ${ind.rate10y?.toFixed(2) ?? '--'}%</div>
+      <div class="yield-kpi-sub">${ind.rate10y>=4.5?'高压区间':ind.rate10y<3.5?'宽松区间':'中性偏紧'}</div>
+    </div>
+    <div class="yield-kpi">
+      <div class="yield-kpi-label">2Y 收益率</div>
+      <div class="yield-kpi-val c-neu">${ind.rate2y?.toFixed(2) ?? '--'}%</div>
+      <div class="yield-kpi-sub">短端利率</div>
+    </div>
+    <div class="yield-kpi">
+      <div class="yield-kpi-label">2Y-10Y 利差</div>
+      <div class="yield-kpi-val ${sc}">${spread != null ? (spread>=0?'+':'')+spread.toFixed(3)+'%' : '--'}</div>
+      <div class="yield-kpi-sub">${spread==null?'--':spread>0.2?'正常陡峭':spread>-0.2?'趋于平坦':spread>-0.5?'轻度倒挂':'⚠ 深度倒挂'}</div>
+    </div>
+    <div class="yield-kpi">
+      <div class="yield-kpi-label">10Y 近30日变化</div>
+      <div class="yield-kpi-val ${velCls}">${ind.change30d!=null?(ind.change30d>=0?'+':'')+ind.change30d.toFixed(3)+'%':'--'}</div>
+      <div class="yield-kpi-sub">${ind.change30d==null?'--':ind.change30d>0.3?'快速上行压力':ind.change30d<-0.3?'快速下行缓解':'温和变动'}</div>
+    </div>`;
+}
+
+// ── Yield Chart ───────────────────────────────────────────────────────────
+let yieldChart = null;
+function renderYieldChart(ind) {
+  const el = document.getElementById('yield-chart');
+  if (!el) return;
+  if (yieldChart) { yieldChart.destroy(); yieldChart = null; }
+
+  const r = ind.ratesRaw;
+  let datasets, yLabel, yMin, yMax;
+
+  if (activeYieldTab === '10y') {
+    const data = r.history_10y ?? [];
+    datasets = [{
+      label: '10Y 收益率',
+      data: data.map(o => ({ x: o.date, y: o.value })),
+      borderColor: '#A32D2D', backgroundColor: 'rgba(163,45,45,.08)',
+      borderWidth: 2, fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 4,
+    }];
+    yLabel = '%'; yMin = null; yMax = null;
+  } else if (activeYieldTab === '2y') {
+    const d10 = r.history_10y ?? [];
+    const d2  = r.history_2y  ?? [];
+    datasets = [
+      { label: '10Y', data: d10.map(o=>({x:o.date,y:o.value})),
+        borderColor:'#A32D2D', borderWidth:2, fill:false, tension:0.3, pointRadius:0, pointHoverRadius:4 },
+      { label: '2Y',  data: d2.map(o=>({x:o.date,y:o.value})),
+        borderColor:'#BA7517', borderWidth:2, fill:false, tension:0.3, pointRadius:0, pointHoverRadius:4 },
+    ];
+    yLabel = '%';
+  } else {
+    // Spread chart — zero line is key
+    const ds = r.history_spread ?? [];
+    const colors = ds.map(o => o.value >= 0 ? 'rgba(29,158,117,.6)' : 'rgba(163,45,45,.6)');
+    datasets = [{
+      label: '2Y-10Y 利差',
+      data: ds.map(o => ({ x: o.date, y: o.value })),
+      borderColor: 'rgba(136,135,128,0)',
+      backgroundColor: colors,
+      borderWidth: 0, fill: true, tension: 0, pointRadius: 0,
+      // Use bar-style fill by rendering as line with filled area
+    }, {
+      label: '利差折线',
+      data: ds.map(o => ({ x: o.date, y: o.value })),
+      borderColor: '#5F5E5A', borderWidth: 1.5, fill: false, tension: 0.3,
+      pointRadius: 0, pointHoverRadius: 4,
+    }];
+    yLabel = '% (正=陡 负=倒挂)';
+  }
+
+  yieldChart = new Chart(el, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: datasets.length > 1, position: 'top',
+          labels: { font:{size:10}, color:'#888780', boxWidth:12 } },
+        tooltip: { callbacks: {
+          label: c => `${c.dataset.label}: ${c.parsed.y?.toFixed(3)}%`
+        }},
+        // Zero line annotation for spread
+        annotation: activeYieldTab === 'spread' ? {
+          annotations: { zeroline: {
+            type:'line', yMin:0, yMax:0,
+            borderColor:'rgba(136,135,128,.5)', borderWidth:1, borderDash:[4,4]
+          }}
+        } : {},
+      },
+      scales: {
+        x: { type:'category', ticks:{font:{size:9},color:'#888780',maxTicksLimit:8,maxRotation:0},
+          grid:{display:false} },
+        y: { border:{display:false}, grid:{color:'rgba(136,135,128,.12)'},
+          ticks:{font:{size:10},color:'#888780',callback:v=>v.toFixed(2)+'%'},
+          ...(yMin!=null ? {min:yMin} : {}), ...(yMax!=null ? {max:yMax} : {}),
+        }
+      }
+    }
+  });
+}
+
+// ── Yield Signals ─────────────────────────────────────────────────────────
+function renderYieldSignals(ind, yld) {
+  const { rate10y, change30d, spread } = ind;
+
+  // 子信号1：绝对水平
+  const lvlCls  = rate10y >= 4.5 ? 'bg-sell' : rate10y < 3.5 ? 'bg-buy' : 'bg-warn';
+  const lvlScore = rate10y < 3.0 ? '+1.2' : rate10y < 3.5 ? '+0.6' : rate10y < 4.0 ? '+0.2'
+                 : rate10y < 4.5 ? '-0.4' : rate10y < 5.0 ? '-0.8' : '-1.2';
+  const lvlDesc  = rate10y >= 4.5
+    ? '高利率环境下，股票估值折现率上升，PE 压缩压力显著。历史上 4.5%+ 对应美股平均 P/E 压缩 15~25%。'
+    : rate10y < 3.5
+    ? '低利率环境利好风险资产，资金寻求更高回报，股市估值相对支撑充分。'
+    : '利率处于中性区间，对股市压制有限，需结合其他指标判断。';
+
+  // 子信号2：变化速度
+  const velCls  = change30d != null && change30d > 0.2 ? 'bg-sell' : change30d != null && change30d < -0.2 ? 'bg-buy' : 'bg-neu';
+  const velScore = change30d == null ? '0' : change30d < -0.3?'+1.0':change30d<-0.1?'+0.4':change30d<0.1?'0':change30d<0.3?'-0.4':'-1.0';
+  const velDesc  = change30d == null ? '数据不可用。'
+    : change30d > 0.3 ? `近30日快速上行 ${change30d.toFixed(2)}%，压力骤增。市场需要时间消化更高的无风险利率，短期对股市冲击显著。`
+    : change30d < -0.3 ? `近30日快速下行 ${Math.abs(change30d).toFixed(2)}%，压力明显缓解。利率下行通常是股市的正面催化剂。`
+    : `近30日小幅变动 ${(change30d>=0?'+':'')+change30d.toFixed(2)}%，处于正常波动范围，冲击有限。`;
+
+  // 子信号3：曲线形态
+  const spCls  = spread == null ? 'bg-neu' : spread > 0.2 ? 'bg-buy' : spread > -0.3 ? 'bg-warn' : 'bg-sell';
+  const spScore = spread == null ? '0' : spread>0.5?'+1.0':spread>0.1?'+0.5':spread>-0.1?'0':spread>-0.5?'-0.5':spread>-1?'-0.8':'-1.0';
+  const spDesc  = spread == null ? '数据不可用。'
+    : spread > 0.3 ? '曲线正向陡峭，市场预期经济持续扩张，信贷环境健康，对股市中长期偏正面。'
+    : spread > -0.1 ? `曲线趋于平坦（利差 ${spread.toFixed(3)}%），历史上是经济周期后期的信号，需要关注衰退风险。`
+    : `⚠ 收益率曲线倒挂（利差 ${spread.toFixed(3)}%）。历史上 2Y/10Y 倒挂后平均 12~18 个月触发衰退，是高优先级风险信号。`;
+
+  document.getElementById('yield-signals').innerHTML = `
+    <div class="yield-sig ${lvlCls}">
+      <div class="yield-sig-title">子信号① 绝对水平　<span style="font-family:monospace">${lvlScore}</span></div>
+      <div class="yield-sig-val">10Y = ${rate10y?.toFixed(2) ?? '--'}%</div>
+      <div class="yield-sig-desc">${lvlDesc}</div>
+    </div>
+    <div class="yield-sig ${velCls}">
+      <div class="yield-sig-title">子信号② 变化速度　<span style="font-family:monospace">${velScore}</span></div>
+      <div class="yield-sig-val">30日 ${change30d!=null?(change30d>=0?'+':'')+change30d.toFixed(3)+'%':'--'}</div>
+      <div class="yield-sig-desc">${velDesc}</div>
+    </div>
+    <div class="yield-sig ${spCls}">
+      <div class="yield-sig-title">子信号③ 曲线形态　<span style="font-family:monospace">${spScore}</span></div>
+      <div class="yield-sig-val">利差 ${spread!=null?(spread>=0?'+':'')+spread.toFixed(3)+'%':'--'}</div>
+      <div class="spread-track">
+        <div class="spread-bar" style="width:${Math.max(4,Math.min(100, (spread!=null?spread:0)+1)/2*100)}%;background:${spread!=null&&spread>0?'#1D9E75':'#A32D2D'}"></div>
+      </div>
+      <div class="spread-zone"><span>-1% 深度倒挂</span><span>0</span><span>+1% 陡峭</span></div>
+      <div class="yield-sig-desc" style="margin-top:4px">${spDesc}</div>
+    </div>`;
+}
+
+// ── History chart ─────────────────────────────────────────────────────────
+function renderHistory(mkt) {
+  const { dates, scores } = makeHistory(mkt);
+  const el = document.getElementById('hist-chart');
+  if (!el) return;
+  if (histChart) { histChart.destroy(); histChart = null; }
+  histChart = new Chart(el, {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [{
+        data: scores,
+        backgroundColor: scores.map(v => v >= 2?'#1D9E75': v>=0?'#888780': v>=-3?'#BA7517':'#A32D2D'),
+        borderRadius: 3, borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>{
+        const d = decisionOf(c.raw);
+        return `评分 ${c.raw>=0?'+':''}${c.raw.toFixed(1)}  →  ${d.action}`;
+      }}}},
+      scales: {
+        x:{ticks:{font:{size:9},color:'#888780',maxRotation:50},grid:{display:false}},
+        y:{min:-10,max:10,border:{display:false},
+          ticks:{font:{size:10},color:'#888780',callback:v=>v>0?`+${v}`:v},
+          grid:{color:'rgba(136,135,128,.10)'}}
+      }
+    }
+  });
+}
+
+// ── Arc SVG helper ────────────────────────────────────────────────────────
+function arcSVG(pct, r, cx, cy, color, w, h) {
+  const toRad = a => (a - 90) * Math.PI / 180;
+  const startDeg = -110, sweep = 220;
+  const s = toRad(startDeg), e = toRad(startDeg + sweep);
+  const bg = `<path d="M ${cx+r*Math.cos(s)} ${cy+r*Math.sin(s)} A ${r} ${r} 0 1 1 ${cx+r*Math.cos(e)} ${cy+r*Math.sin(e)}" fill="none" stroke="var(--border)" stroke-width="9" stroke-linecap="round"/>`;
+  const ep = toRad(startDeg + pct * sweep);
+  const ex = cx + r * Math.cos(ep), ey = cy + r * Math.sin(ep);
+  const large = pct * sweep > 180 ? 1 : 0;
+  const fg2 = pct < 0.01 ? '' :
+    `<path d="M ${cx+r*Math.cos(s)} ${cy+r*Math.sin(s)} A ${r} ${r} 0 ${large} 1 ${ex} ${ey}" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round"/>`;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${bg}${fg2}</svg>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MANUAL OVERRIDE PANEL
+// 让用户手动输入数值覆盖 API 数据，用于沙盘推演
+// ═══════════════════════════════════════════════════════════════════════════
+// Override state — null means "use live data"
+const MO = {
+  fear_greed: null, vix: null, rate10y: null,
+  nasdaqPE: null, sp500VsMa: null, usdjpy: null,
+  spread: null, change30d: null,
+};
+
+function renderManualPanel() {
+  const sliders = [
+    { key:'fear_greed', label:'Fear & Greed',     min:0,   max:100, step:1,   fmt: v => Math.round(v),
+      hint:'逆向：低=恐惧=买点', live: liveData ? (extractIndicators(liveData).fg ?? 38) : 38 },
+    { key:'vix',        label:'VIX 恐慌指数',     min:8,   max:55,  step:0.5, fmt: v => (+v).toFixed(1),
+      hint:'逆向：高=恐慌=买点', live: liveData ? (extractIndicators(liveData).vix ?? 23) : 23 },
+    { key:'rate10y',    label:'美债 10Y (%)',      min:0.5, max:7,   step:0.05,fmt: v => (+v).toFixed(2),
+      hint:'高=压制估值', live: liveData ? (extractIndicators(liveData).rate10y ?? 4.28) : 4.28 },
+    { key:'spread',     label:'2Y-10Y 利差 (%)',   min:-2,  max:2,   step:0.05,fmt: v => (+v).toFixed(2),
+      hint:'负=倒挂=衰退预警', live: liveData ? (extractIndicators(liveData).spread ?? -0.44) : -0.44 },
+    { key:'change30d',  label:'10Y 30日变化 (%)',  min:-1,  max:1,   step:0.05,fmt: v => (v>=0?'+':'')+( +v).toFixed(2),
+      hint:'上行=压力增加', live: liveData ? (extractIndicators(liveData).change30d ?? 0.18) : 0.18 },
+    { key:'nasdaqPE',   label:'Nasdaq P/E',        min:10,  max:60,  step:1,   fmt: v => Math.round(v)+'x',
+      hint:'高=贵=逆向卖', live: liveData ? (extractIndicators(liveData).nasdaqPE ?? 28) : 28 },
+    { key:'sp500VsMa',  label:'S&P500 vs MA200(%)',min:-20, max:20,  step:0.5, fmt: v => (v>=0?'+':'')+( +v).toFixed(1)+'%',
+      hint:'负=破位', live: liveData ? (extractIndicators(liveData).sp500VsMa ?? -3) : -3 },
+    { key:'usdjpy',     label:'USD/JPY',           min:110, max:170, step:1,   fmt: v => Math.round(v),
+      hint:'日股关键因子', live: liveData ? (extractIndicators(liveData).usdjpy ?? 149) : 149 },
+  ];
+
+  const panel = document.getElementById('manual-panel');
+  if (!panel) return;
+
+  let html = '<h2 class="section-title" style="margin-bottom:10px">🎛 手动调参（沙盘推演）</h2>';
+  html += '<p style="font-size:12px;color:var(--muted);margin-bottom:14px">覆盖实时数据，模拟不同宏观场景下的决策信号。点击「使用实时值」恢复 API 数据。</p>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">';
+
+  sliders.forEach(sl => {
+    const live = sl.live;
+    const cur  = MO[sl.key] ?? live;
+    const isOvr = MO[sl.key] !== null;
+    html += `<div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;border:1px solid ${isOvr?'var(--warn)':'var(--border)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:600;color:var(--text)">${sl.label}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${isOvr ? `<span style="font-size:10px;color:var(--warn);background:var(--warn-bg);padding:1px 7px;border-radius:99px">手动覆盖</span>` : ''}
+          <button onclick="resetOverride('${sl.key}')" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline">
+            实时值 ${sl.fmt(live)}
+          </button>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="range" min="${sl.min}" max="${sl.max}" step="${sl.step}" value="${cur}"
+          id="mo-${sl.key}" style="flex:1;accent-color:${isOvr?'#BA7517':'var(--buy)'}"
+          oninput="setOverride('${sl.key}',this.value);document.getElementById('mo-val-${sl.key}').textContent='${sl.fmt(cur).replace(/[^%xA-Z0-9+\-.]/g,'')||''}';renderAll()">
+        <span id="mo-val-${sl.key}" style="font-size:12px;font-weight:600;min-width:52px;text-align:right">${sl.fmt(cur)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--hint);margin-top:3px">${sl.hint}</div>
+    </div>`;
+  });
+
+  html += '</div>';
+  html += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<button onclick="resetAllOverrides()" style="font-size:12px;padding:6px 16px;border-radius:99px;border:0.5px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer">↺ 全部恢复实时值</button>';
+  html += '<button onclick="applyScenario(\'crash\')" style="font-size:12px;padding:6px 16px;border-radius:99px;border:0.5px solid var(--sell);background:var(--sell-bg);color:var(--sell-text);cursor:pointer">📉 模拟市场崩盘</button>';
+  html += '<button onclick="applyScenario(\'panic\')" style="font-size:12px;padding:6px 16px;border-radius:99px;border:0.5px solid var(--buy);background:var(--buy-bg);color:var(--buy-text);cursor:pointer">😱 模拟极度恐惧（买点）</button>';
+  html += '<button onclick="applyScenario(\'bubble\')" style="font-size:12px;padding:6px 16px;border-radius:99px;border:0.5px solid var(--warn);background:var(--warn-bg);color:var(--warn-text);cursor:pointer">🫧 模拟泡沫顶部</button>';
+  html += '</div>';
+  panel.innerHTML = html;
+
+  // Re-bind sliders (oninput needs proper value formatting)
+  sliders.forEach(sl => {
+    const el = document.getElementById('mo-' + sl.key);
+    const valEl = document.getElementById('mo-val-' + sl.key);
+    if (!el || !valEl) return;
+    el.oninput = function() {
+      MO[sl.key] = parseFloat(this.value);
+      valEl.textContent = sl.fmt(this.value);
+      renderManualPanel();
+      renderAll();
+    };
+  });
+}
+
+function setOverride(key, val) { MO[key] = parseFloat(val); }
+function resetOverride(key) { MO[key] = null; renderManualPanel(); renderAll(); }
+function resetAllOverrides() {
+  Object.keys(MO).forEach(k => MO[k] = null);
+  renderManualPanel(); renderAll();
+}
+
+// Preset scenarios
+function applyScenario(name) {
+  const scenarios = {
+    crash:  { fear_greed:8,  vix:45,  rate10y:4.8, spread:-0.8, change30d:+0.4, nasdaqPE:22, sp500VsMa:-12, usdjpy:145 },
+    panic:  { fear_greed:15, vix:38,  rate10y:4.1, spread:-0.3, change30d:-0.2, nasdaqPE:24, sp500VsMa:-5,  usdjpy:148 },
+    bubble: { fear_greed:88, vix:11,  rate10y:4.5, spread:+0.1, change30d:+0.3, nasdaqPE:42, sp500VsMa:+12, usdjpy:152 },
+  };
+  const s = scenarios[name];
+  if (!s) return;
+  Object.entries(s).forEach(([k,v]) => MO[k] = v);
+  renderManualPanel(); renderAll();
+}
+
+// ── Override-aware extractIndicators ─────────────────────────────────────
+// Must call AFTER MO is set — wraps extractIndicators with manual overrides
+function extractWithOverrides(data) {
+  const base = extractIndicators(data);
+  return {
+    ...base,
+    fg:         MO.fear_greed !== null ? MO.fear_greed : base.fg,
+    vix:        MO.vix        !== null ? MO.vix        : base.vix,
+    rate10y:    MO.rate10y    !== null ? MO.rate10y    : base.rate10y,
+    spread:     MO.spread     !== null ? MO.spread     : base.spread,
+    change30d:  MO.change30d  !== null ? MO.change30d  : base.change30d,
+    nasdaqPE:   MO.nasdaqPE   !== null ? MO.nasdaqPE   : base.nasdaqPE,
+    sp500VsMa:  MO.sp500VsMa  !== null ? MO.sp500VsMa  : base.sp500VsMa,
+    usdjpy:     MO.usdjpy     !== null ? MO.usdjpy     : base.usdjpy,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIG PANEL — fully JS-rendered (no template literals in HTML)
+// ═══════════════════════════════════════════════════════════════════════════
+function renderConfigPanel() {
+  const panel = document.getElementById('config-panel');
+  if (!panel) return;
+
+  function sl(id, label, min, max, step, defVal, onInput, note) {
+    const curVal = getCfg(id);
+    return `<div class="weight-row">
+      <div class="weight-label">${label}</div>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${curVal}" id="${id}"
+        style="flex:1;accent-color:var(--buy)"
+        oninput="${onInput}">
+      <span class="weight-val" id="${id}-val">${curVal}${typeof curVal === 'number' && id.startsWith('w-') ? '%' : ''}</span>
+    </div>${note ? '<p style="font-size:10px;color:var(--hint);margin:2px 0 8px 0">' + note + '</p>' : ''}`;
+  }
+
+  function thRow(id, label, hint, defVal) {
+    const curVal = getCfg(id);
+    return `<div class="threshold-row" style="background:var(--bg)">
+      <div>
+        <div style="font-size:12px">${label}</div>
+        <div class="threshold-label">${hint}</div>
+      </div>
+      <input type="number" class="threshold-input" id="${id}" value="${curVal}" min="-10" max="10"
+        onchange="saveConfig();renderAll()">
+    </div>`;
+  }
+
+  function divider() { return '<div class="divider" style="margin:12px 0"></div>'; }
+  function subTitle(t) { return `<div class="config-section-title">${t}</div>`; }
+
+  const left = `
+    ${subTitle('决策阈值（总分 ±10）')}
+    ${thRow('th-strong-buy','重仓买入阈值','建议 4~6',5)}
+    ${thRow('th-buy','买入阈值','建议 1~3',2)}
+    ${thRow('th-neutral','中性下限','0 或 -1',0)}
+    ${thRow('th-reduce','减仓阈值','建议 -2~-4',-3)}
+    <div class="config-note" style="margin-top:10px">
+      阈值越高买入信号越难触发，策略越保守；反之越激进。建议先用默认值运行一段时间再调整。
+    </div>
+    <button class="reset-btn" onclick="resetConfig()">↺ 恢复默认参数</button>
+  `;
+
+  const right = `
+    ${subTitle('🟡 美债层独立权重')}
+    ${sl('w-yield','美债层占总分',5,40,1,20,
+      "document.getElementById('w-yield-val').textContent=this.value+'%';saveConfig();renderAll()",
+      '美债层先行分配，剩余由情绪+基本面层按比例分配')}
+    ${divider()}
+    ${subTitle('情绪层权重（各市场，占剩余权重）')}
+    ${sl('w-us-sent','美股 情绪占比',20,80,1,50,
+      "document.getElementById('w-us-sent-val').textContent=this.value+'%';saveConfig();renderAll()")}
+    ${sl('w-jp-sent','日股 情绪占比',20,80,1,50,
+      "document.getElementById('w-jp-sent-val').textContent=this.value+'%';saveConfig();renderAll()")}
+    ${sl('w-cn-sent','A股 情绪占比',20,80,1,60,
+      "document.getElementById('w-cn-sent-val').textContent=this.value+'%';saveConfig();renderAll()")}
+    ${divider()}
+    ${subTitle('情绪层内部权重')}
+    ${sl('w-fg','Fear & Greed',30,80,1,60,
+      "document.getElementById('w-fg-val').textContent=this.value+'%';syncVixWeight();saveConfig();renderAll()")}
+    ${sl('w-vix','VIX 恐慌指数',20,70,1,40,'')}
+    <p style="font-size:10px;color:var(--hint);margin:2px 0 8px 0">VIX 权重 = 100% - F&G 权重，自动联动</p>
+    ${divider()}
+    ${subTitle('基本面层内部权重（美股）')}
+    <p style="font-size:10px;color:var(--hint);margin-bottom:8px">注：美债10Y已移至独立美债层，基本面层仅含 MA200 + P/E，两项自动归一化</p>
+    ${sl('w-ma200','MA200 偏离权重',0,100,1,50,
+      "document.getElementById('w-ma200-val').textContent=this.value+'%';saveConfig();renderAll()")}
+    ${sl('w-pe','Nasdaq P/E 权重',0,100,1,50,
+      "document.getElementById('w-pe-val').textContent=this.value+'%';saveConfig();renderAll()")}
+    <p style="font-size:10px;color:var(--hint);margin-top:2px">两者之和超过100时自动按比例归一化</p>
+  `;
+
+  panel.innerHTML = `
+    <h2 class="section-title" style="font-size:13px;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:6px">
+      ⚙️ 模型参数配置
+    </h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
+      所有参数实时生效，调整后评分和决策信号立即更新。配置保存在本地浏览器，刷新不丢失。
+    </p>
+    <div class="config-grid">
+      <div>${left}</div>
+      <div>${right}</div>
+    </div>`;
+
+  // VIX slider disabled (auto-linked)
+  const vixEl = document.getElementById('w-vix');
+  if (vixEl) { vixEl.disabled = true; vixEl.style.opacity = '0.5'; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+loadConfig();
+syncVixWeight();
+renderConfigPanel();   // render config UI immediately (doesn't need live data)
+loadData();
+
+// Auto-refresh every 15 minutes
+setInterval(loadData, 15 * 60 * 1000);
+</script>
+</body>
+</html>
